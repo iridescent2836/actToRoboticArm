@@ -1,0 +1,3 @@
+python imitate_episodes.py --task_name sim_transfer_cube_scripted --ckpt_dir "./temp_4000_steps_30" --policy_class ACT --kl_weight 10 --chunk_size 30 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 --num_steps 4000 --lr 1e-5 --seed 0
+
+python imitate_episodes.py --task_name sim_transfer_cube_scripted --ckpt_dir "./temp_4000_steps_40" --policy_class ACT --kl_weight 10 --chunk_size 40 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 --num_steps 4000 --lr 1e-5 --seed 0

@@ -8,7 +8,7 @@ from copy import deepcopy
 from itertools import repeat
 from tqdm import tqdm
 from einops import rearrange
-import wandb
+# import wandb
 import time
 from torchvision import transforms
 
@@ -97,7 +97,7 @@ def main(args):
 
         policy_config = {'lr': args['lr'],
                          'camera_names': camera_names,
-                         'action_dim': 10,
+                         'action_dim': 16,
                          'observation_horizon': 1,
                          'action_horizon': 8,
                          'prediction_horizon': args['chunk_size'],
@@ -146,9 +146,9 @@ def main(args):
     config_path = os.path.join(ckpt_dir, 'config.pkl')
     expr_name = ckpt_dir.split('/')[-1]
     if not is_eval:
-        wandb.init(project="mobile-aloha2", reinit=True, name=expr_name)
-        wandb.config.update(config)
-        print('wandb initialized')
+        # wandb.init(project="mobile-aloha2", reinit=True, entity="mobile-aloha2", name=expr_name)
+        # wandb.config.update(config)
+        pass
     with open(config_path, 'wb') as f:
         pickle.dump(config, f)
     if is_eval:
@@ -156,7 +156,7 @@ def main(args):
         results = []
         for ckpt_name in ckpt_names:
             success_rate, avg_return = eval_bc(config, ckpt_name, save_episode=True, num_rollouts=10)
-            wandb.log({'success_rate': success_rate, 'avg_return': avg_return})
+            # wandb.log({'success_rate': success_rate, 'avg_return': avg_return})
             results.append([ckpt_name, success_rate, avg_return])
 
         for ckpt_name, success_rate, avg_return in results:
@@ -178,7 +178,7 @@ def main(args):
     ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
     torch.save(best_state_dict, ckpt_path)
     print(f'Best ckpt, val loss {min_val_loss:.6f} @ step{best_step}')
-    wandb.finish()
+    # wandb.finish()
 
 
 def make_policy(policy_class, policy_config):
@@ -251,43 +251,11 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
     print(loading_status)
     policy.cuda()
     policy.eval()
-    if vq:
-        vq_dim = config['policy_config']['vq_dim']
-        vq_class = config['policy_config']['vq_class']
-        latent_model = Latent_Model_Transformer(vq_dim, vq_dim, vq_class)
-        latent_model_ckpt_path = os.path.join(ckpt_dir, 'latent_model_last.ckpt')
-        latent_model.deserialize(torch.load(latent_model_ckpt_path))
-        latent_model.eval()
-        latent_model.cuda()
-        print(f'Loaded policy from: {ckpt_path}, latent model from: {latent_model_ckpt_path}')
-    else:
-        print(f'Loaded: {ckpt_path}')
+
+    print(f'Loaded: {ckpt_path}')
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
     with open(stats_path, 'rb') as f:
         stats = pickle.load(f)
-    # if use_actuator_net:
-    #     prediction_len = actuator_config['prediction_len']
-    #     future_len = actuator_config['future_len']
-    #     history_len = actuator_config['history_len']
-    #     actuator_network_dir = actuator_config['actuator_network_dir']
-
-    #     from act.train_actuator_network import ActuatorNetwork
-    #     actuator_network = ActuatorNetwork(prediction_len)
-    #     actuator_network_path = os.path.join(actuator_network_dir, 'actuator_net_last.ckpt')
-    #     loading_status = actuator_network.load_state_dict(torch.load(actuator_network_path))
-    #     actuator_network.eval()
-    #     actuator_network.cuda()
-    #     print(f'Loaded actuator network from: {actuator_network_path}, {loading_status}')
-
-    #     actuator_stats_path  = os.path.join(actuator_network_dir, 'actuator_net_stats.pkl')
-    #     with open(actuator_stats_path, 'rb') as f:
-    #         actuator_stats = pickle.load(f)
-        
-    #     actuator_unnorm = lambda x: x * actuator_stats['commanded_speed_std'] + actuator_stats['commanded_speed_std']
-    #     actuator_norm = lambda x: (x - actuator_stats['observed_speed_mean']) / actuator_stats['observed_speed_mean']
-    #     def collect_base_action(all_actions, norm_episode_all_base_actions):
-    #         post_processed_actions = post_process(all_actions.squeeze(0).cpu().numpy())
-    #         norm_episode_all_base_actions += actuator_norm(post_processed_actions[:, -2:]).tolist()
 
     pre_process = lambda s_qpos: (s_qpos - stats['qpos_mean']) / stats['qpos_std']
     if policy_class == 'Diffusion':
@@ -297,12 +265,12 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
 
     # load environment
     if real_robot:
-        from aloha_scripts.robot_utils import move_grippers # requires aloha
-        from aloha_scripts.real_env import make_real_env # requires aloha
-        env = make_real_env(init_node=True, setup_robots=True, setup_base=True)
+        # set up the robot
         env_max_reward = 0
 
+
     query_frequency = policy_config['num_queries']
+
     if real_robot:
         BASE_DELAY = 13
         query_frequency -= BASE_DELAY
@@ -413,6 +381,7 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
                         # if t % query_frequency == query_frequency - 1:
                         #     # zero out base actions to avoid overshooting
                         #     raw_action[0, -2:] = 0
+
                 else:
                     raise NotImplementedError
                 # print('query policy: ', time.time() - time3)
@@ -423,13 +392,27 @@ def eval_bc(config, ckpt_name, save_episode=True, num_rollouts=50):
                 action = post_process(raw_action)
                 target_qpos = action[:-2]
 
-
+                # if use_actuator_net:
+                #     assert(not temporal_agg)
+                #     if t % prediction_len == 0:
+                #         offset_start_ts = t + history_len
+                #         actuator_net_in = np.array(norm_episode_all_base_actions[offset_start_ts - history_len: offset_start_ts + future_len])
+                #         actuator_net_in = torch.from_numpy(actuator_net_in).float().unsqueeze(dim=0).cuda()
+                #         pred = actuator_network(actuator_net_in)
+                #         base_action_chunk = actuator_unnorm(pred.detach().cpu().numpy()[0])
+                #     base_action = base_action_chunk[t % prediction_len]
+                # else:
                 base_action = action[-2:]
+                # base_action = calibrate_linear_vel(base_action, c=0.19)
+                # base_action = postprocess_base_action(base_action)
+                # print('post process: ', time.time() - time4)
 
                 ### step the environment
                 time5 = time.time()
                 if real_robot:
                     ts = env.step(target_qpos, base_action)
+                else:
+                    ts = env.step(target_qpos)
                 # print('step env: ', time.time() - time5)
 
                 ### for visualization
@@ -552,7 +535,7 @@ def train_bc(train_dataloader, val_dataloader, config):
                     best_ckpt_info = (step, min_val_loss, deepcopy(policy.serialize()))
             for k in list(validation_summary.keys()):
                 validation_summary[f'val_{k}'] = validation_summary.pop(k)            
-            wandb.log(validation_summary, step=step)
+            # wandb.log(validation_summary, step=step)
             print(f'Val loss:   {epoch_val_loss:.5f}')
             summary_string = ''
             for k, v in validation_summary.items():
@@ -566,7 +549,7 @@ def train_bc(train_dataloader, val_dataloader, config):
             ckpt_path = os.path.join(ckpt_dir, ckpt_name)
             torch.save(policy.serialize(), ckpt_path)
             success, _ = eval_bc(config, ckpt_name, save_episode=True, num_rollouts=10)
-            wandb.log({'success': success}, step=step)
+            # wandb.log({'success': success}, step=step)
 
         # training
         policy.train()
@@ -577,7 +560,7 @@ def train_bc(train_dataloader, val_dataloader, config):
         loss = forward_dict['loss']
         loss.backward()
         optimizer.step()
-        wandb.log(forward_dict, step=step) # not great, make training 1-2% slower
+        # wandb.log(forward_dict, step=step) # not great, make training 1-2% slower
 
         if step % save_every == 0:
             ckpt_path = os.path.join(ckpt_dir, f'policy_step_{step}_seed_{seed}.ckpt')

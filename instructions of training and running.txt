@@ -1,0 +1,23 @@
+# 8000 -50
+# training
+python imitate_episodes.py --task_name sim_transfer_cube_scripted --ckpt_dir "./temp_8000_steps_50" --policy_class ACT --kl_weight 10 --chunk_size 20 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 --num_steps 8000 --lr 1e-5 --seed 0
+# run on robot
+python run2.py  --ckpt_dir ./temp_8000_steps_50 --policy_class ACT --task_name test --batch_size 1 --seed 0 --num_steps 100 --lr 1e-5
+
+# 8000 -35
+
+python imitate_episodes.py --task_name sim_transfer_cube_scripted --ckpt_dir "./temp_8000_steps_35" --policy_class ACT --kl_weight 10 --chunk_size 20 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 --num_steps 8000 --lr 1e-5 --seed 0
+
+python run2.py  --ckpt_dir ./temp_8000_steps_35 --policy_class ACT --task_name test --batch_size 1 --seed 0 --num_steps 100 --lr 1e-5
+
+# 8000 -20
+
+python imitate_episodes.py --task_name sim_transfer_cube_scripted --ckpt_dir "./temp_8000_steps_20" --policy_class ACT --kl_weight 10 --chunk_size 20 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 --num_steps 8000 --lr 1e-5 --seed 0
+
+python run2.py  --ckpt_dir ./temp_8000_steps_20 --policy_class ACT --task_name test --batch_size 1 --seed 0 --num_steps 100 --lr 1e-5
+
+
+# 8000 -10
+python imitate_episodes.py --task_name sim_transfer_cube_scripted --ckpt_dir "./temp_8000_steps_10" --policy_class ACT --kl_weight 10 --chunk_size 10 --hidden_dim 512 --batch_size 8 --dim_feedforward 3200 --num_steps 8000 --lr 1e-5 --seed 0
+
+python run2.py  --ckpt_dir ./temp_8000_steps_10  --policy_class ACT --task_name test --batch_size 1 --seed 0 --num_steps 100 --lr 1e-5

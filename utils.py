@@ -51,8 +51,10 @@ class EpisodicDataset(torch.utils.data.Dataset):
         try:
             # print(dataset_path)
             with h5py.File(dataset_path, 'r') as root:
+                #print('successfully opened file')
                 try: # some legacy data does not have this attribute
-                    is_sim = root.attrs['sim']
+                    # is_sim = root.attrs['sim']
+                    is_sim = False
                 except:
                     is_sim = False
                 compressed = root.attrs.get('compress', False)
@@ -67,12 +69,12 @@ class EpisodicDataset(torch.utils.data.Dataset):
                 original_action_shape = action.shape
                 episode_len = original_action_shape[0]
                 # get observation at start_ts only
-                qpos = root['/observations/qpos'][start_ts]
-                qvel = root['/observations/qvel'][start_ts]
+                qpos = root['/qpos'][start_ts]
+                qvel = root['/qvel'][start_ts]
                 image_dict = dict()
                 for cam_name in self.camera_names:
-                    image_dict[cam_name] = root[f'/observations/images/{cam_name}'][start_ts]
-                
+                    image_dict[cam_name] = root[f'/cam_data/{cam_name}'][start_ts]
+                # print('get data success')
                 if compressed:
                     for cam_name in image_dict.keys():
                         decompressed_image = cv2.imdecode(image_dict[cam_name], 1)
@@ -86,6 +88,7 @@ class EpisodicDataset(torch.utils.data.Dataset):
                     action = action[max(0, start_ts - 1):] # hack, to make timesteps more aligned
                     action_len = episode_len - max(0, start_ts - 1) # hack, to make timesteps more aligned
 
+            # print('padded_action')
             # self.is_sim = is_sim
             padded_action = np.zeros((self.max_episode_len, original_action_shape[1]), dtype=np.float32)
             padded_action[:action_len] = action
@@ -97,22 +100,31 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
             # new axis for different cameras
             all_cam_images = []
+            # print(f'{self.camera_names=}')
             for cam_name in self.camera_names:
                 all_cam_images.append(image_dict[cam_name])
             all_cam_images = np.stack(all_cam_images, axis=0)
 
-            # construct observations
+            # print('get image data')
+            # here is the error, fuck it
+            # construct observation
+            
+            
+            # all_cam_images = all_cam_images.astype(np.float32)
+            
             image_data = torch.from_numpy(all_cam_images)
+            # print('image_data')
             qpos_data = torch.from_numpy(qpos).float()
             action_data = torch.from_numpy(padded_action).float()
             is_pad = torch.from_numpy(is_pad).bool()
 
+            # print('transfering data')
             # channel last
             image_data = torch.einsum('k h w c -> k c h w', image_data)
-
+            # print('transfered data')
             # augmentation
             if self.transformations is None:
-                print('Initializing transformations')
+                # print('Initializing transformations')
                 original_size = image_data.shape[2:]
                 ratio = 0.95
                 self.transformations = [
@@ -129,7 +141,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
             # normalize image and change dtype to float
             image_data = image_data / 255.0
 
+            # print('into Diffusion')
             if self.policy_class == 'Diffusion':
+                # print('get norm stats err')
                 # normalize to [-1, 1]
                 action_data = ((action_data - self.norm_stats["action_min"]) / (self.norm_stats["action_max"] - self.norm_stats["action_min"])) * 2 - 1
             else:
@@ -138,7 +152,9 @@ class EpisodicDataset(torch.utils.data.Dataset):
 
             qpos_data = (qpos_data - self.norm_stats["qpos_mean"]) / self.norm_stats["qpos_std"]
 
-        except:
+        except Exception as e:
+            print(f"err type: {type(e)}")
+            print(f"err info: {e}")
             print(f'Error loading {dataset_path} in __getitem__')
             quit()
 
@@ -154,8 +170,8 @@ def get_norm_stats(dataset_path_list):
     for dataset_path in dataset_path_list:
         try:
             with h5py.File(dataset_path, 'r') as root:
-                qpos = root['/observations/qpos'][()]
-                qvel = root['/observations/qvel'][()]
+                qpos = root['/qpos'][()]
+                qvel = root['/qvel'][()]
                 if '/base_action' in root:
                     base_action = root['/base_action'][()]
                     base_action = preprocess_base_action(base_action)
@@ -263,6 +279,7 @@ def load_data(dataset_dir_l, name_filter, camera_names, batch_size_train, batch_
     train_dataset = EpisodicDataset(dataset_path_list, camera_names, norm_stats, train_episode_ids, train_episode_len, chunk_size, policy_class)
     val_dataset = EpisodicDataset(dataset_path_list, camera_names, norm_stats, val_episode_ids, val_episode_len, chunk_size, policy_class)
     train_num_workers = (8 if os.getlogin() == 'zfu' else 16) if train_dataset.augment_images else 2
+    # train_num_workers = 8
     val_num_workers = 8 if train_dataset.augment_images else 2
     print(f'Augment images: {train_dataset.augment_images}, train_num_workers: {train_num_workers}, val_num_workers: {val_num_workers}')
     train_dataloader = DataLoader(train_dataset, batch_sampler=batch_sampler_train, pin_memory=True, num_workers=train_num_workers, prefetch_factor=2)

@@ -99,6 +99,7 @@ class DETRVAE(nn.Module):
             ### Obtain latent z from action sequence
             if is_training:
                 # project action sequence to embedding dim, and concat with a CLS token
+                # print(actions.shape) # (8, 100, 9)
                 action_embed = self.encoder_action_proj(actions) # (bs, seq, hidden_dim)
                 qpos_embed = self.encoder_joint_proj(qpos)  # (bs, hidden_dim)
                 qpos_embed = torch.unsqueeze(qpos_embed, axis=1)  # (bs, 1, hidden_dim)
@@ -150,6 +151,8 @@ class DETRVAE(nn.Module):
         env_state: None
         actions: batch, seq, action_dim
         """
+        
+        # print(f"actions in vae forward: {actions.shape}")
         latent_input, probs, binaries, mu, logvar = self.encode(qpos, actions, is_pad, vq_sample)
 
         # cvae decoder
@@ -267,7 +270,7 @@ def build_encoder(args):
 
 
 def build(args):
-    state_dim = 14 # TODO hardcode
+    state_dim = 7 # TODO hardcode
 
     # From state
     # backbone = None # from state for now, no need for conv nets
@@ -282,7 +285,7 @@ def build(args):
     if args.no_encoder:
         encoder = None
     else:
-        encoder = build_transformer(args)
+        encoder = build_encoder(args)
 
     model = DETRVAE(
         backbones,
@@ -294,7 +297,11 @@ def build(args):
         vq=args.vq,
         vq_class=args.vq_class,
         vq_dim=args.vq_dim,
-        action_dim=args.action_dim,
+        action_dim=10, 
+        # the reason why it is 10. 10 = 8 + 2.
+        # the following code is in utils.py originally
+        # dummy_base_action = np.zeros([action.shape[0], 2])
+        # action = np.concatenate([action, dummy_base_action], axis=-1)
     )
 
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
